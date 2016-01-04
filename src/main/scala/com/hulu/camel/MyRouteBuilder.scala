@@ -2,7 +2,7 @@ package com.hulu.camel
 
 import java.util.UUID
 
-import _root_.com.hulu.camel.schema.{AvroSerializer, Ingredient, Pizza}
+import com.hulu.camel.schema.{PizzaDecoder, Ingredient, Pizza}
 import kafka.message.DefaultCompressionCodec
 import org.apache.camel.scala.dsl.builder.ScalaRouteBuilder
 import org.apache.camel.{CamelContext, Exchange}
@@ -23,23 +23,18 @@ class MyRouteBuilder(override val context: CamelContext) extends ScalaRouteBuild
     Array(pepperoni,hawaiian)
   }
 
-  val pizzaFileFreezer = (exchange: Exchange) => {
-    AvroSerializer.serializePizzaToFile(pizzaBaker,"frozen_pizzas")
-  }
-
   val pizzaByteUnfreezer = (exchange: Exchange) => {
     val pizzaStream: Array[Byte] = exchange.getIn.getBody(classOf[Array[Byte]])
-    val pizzas: Seq[Pizza] = AvroSerializer.deserializePizzasFromBytes(pizzaStream)
+    val pizzas: Seq[Pizza] = PizzaDecoder.fromBytes(pizzaStream)
     println("Unfrozen pizzas:" + pizzas.mkString("\n"))
     exchange.getIn.setBody(pizzas)
   }
 
   val pizzaByteFreezer = (exchange: Exchange) => {
     val pizzas: Seq[Pizza] = pizzaBaker
-    val pizzaStream: Array[Byte] = AvroSerializer.serializePizzasToBytes(pizzas)
 //    producer.send(pizzaStream, null)
     println("Frozen pizzas:" + pizzas.mkString("\n"))
-    exchange.getIn.setBody(pizzaStream)
+    exchange.getIn.setBody(pizzas)
   }
 
   // a route using Scala blocks
@@ -47,7 +42,8 @@ class MyRouteBuilder(override val context: CamelContext) extends ScalaRouteBuild
     process(pizzaByteFreezer)
 //    setHeader(KafkaConstants.PARTITION_KEY,"1")
 //    setHeader(KafkaConstants.KEY,"1")
-    to(s"kafka:?topic=${testTopic}&zookeeperConnect=192.168.99.100:2181&brokers=192.168.99.100:9092&requestRequiredAcks=-1&clientId=${clientId}&compressionCodec=${codec}&producerType=sync")
+    to(s"kafka:?topic=${testTopic}&zookeeperConnect=192.168.99.100:2181&brokers=192.168.99.100:9092&requestRequiredAcks=-1" +
+      s"&clientId=${clientId}&compressionCodec=${codec}&producerType=sync&serializerClass=com.hulu.camel.schema.PizzaEncoder")
     to("log:producer")
   }
 
